@@ -1,9 +1,11 @@
 import codecs
 import math
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 from pathlib import Path
 import csv
+import cvxpy as cp
+
 
 
 # Classes from Pabulib
@@ -352,16 +354,58 @@ def onemin(e : Election, g : list = None, m = None, u : bool = False, ) -> set[C
                 to_remove.add(g)
 
         unsat_g -= to_remove
-    
-    ##todo: capstone after onemin
+
+    if m == None:
+        pass 
+    else:
+        unselected_profiles = {}
+        _ = [unselected_profiles.add(e.profile[key]) for key in unselected_proj]
+        subelection = Election(
+            voters=e.voters,
+            profile=unselected_profiles,
+            budget = e.budget - spent
+        )
+        if m == "g":
+            add_proj = greedy(subelection, u)
+        elif m == "mes":
+            add_proj = equal_shares(subelection)
+    selected_proj.union(add_proj)
 
     return selected_proj
             
 
 
 def optimal(e : Election, u: bool) -> set[Candidate]:
-    pass
-    ##todo
+
+    #preprocessing the election data
+    num_alt = len(e.profile)
+
+    keys = [key for key in e.profile.keys()]
+    cost_proj = np.asarray([key.cost for key in keys])
+    votes_proj = np.array([len(e.profile[key]) for key in keys])
+
+    #defining variables, objective and constraints
+    x = cp.Variable(num_alt, integer = True)
+    
+    if u:
+        #maximize cost utility
+        o = cp.Maximize(np.multiply(votes_proj, cost_proj) @ x)
+    else:
+        #maximize vote utility
+        o = cp.Maximize(votes_proj @ x)
+    
+    c = [0 <= x, x <= 1, cost_proj @ x <= e.budget]
+
+    prob = cp.Problem(o, c)
+
+    #running the problem
+    result = prob.solve()
+    vals = x.value
+
+    print(vals)
+
+    #parsing the results
+    return(vals)
 
 def bounded_utility(e: Election, g : list, u : bool, eps : int) -> set[Candidate]:
     pass
@@ -391,8 +435,14 @@ def generate_groups (e : Election, m : int):
     ##groups should be a set of tuples of voters
 
 def run_gauntlet(filename):
-    e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
+    e = Election().read_from_files(filename)
 
-e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
-print(greedy(e))
-print(onemin(e))
+    print(optimal(e, True))
+    print(optimal(e, False))
+    print(greedy(e))
+    print(greedy(e, True))
+    print(equal_shares(e))
+    print(onemin(e))
+
+run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
+
