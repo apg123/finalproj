@@ -317,7 +317,7 @@ def greedy(e : Election, u : bool = False) -> set[Candidate]:
 
     return(set(selected_projects))
 
-def onemin(e : Election, g : list = None, m = None, u : bool = False, ) -> set[Candidate]:
+def onemin(e : Election, g : set = None, m = None, u : bool = False, ) -> set[Candidate]:
     unselected_proj = set(e.profile.keys())
     selected_proj = set()
     if g == None:
@@ -369,7 +369,7 @@ def onemin(e : Election, g : list = None, m = None, u : bool = False, ) -> set[C
             add_proj = greedy(subelection, u)
         elif m == "mes":
             add_proj = equal_shares(subelection)
-    selected_proj.union(add_proj)
+        selected_proj.union(add_proj)
 
     return selected_proj
             
@@ -402,14 +402,80 @@ def optimal(e : Election, u: bool) -> set[Candidate]:
     result = prob.solve()
     vals = x.value
 
-    print(vals)
+    #parsing the results'
+    res = set()
+    for i in range(len(vals)):
+        if vals[i] == 1:
+            res.add(keys[i])
 
-    #parsing the results
-    return(vals)
+    return res
 
-def bounded_utility(e: Election, g : list, u : bool, eps : int) -> set[Candidate]:
-    pass
-    ##todo after optimal
+def bounded_utility(e: Election, g : set, u : bool = False, eps : int = .5) -> set[Candidate]:
+    
+    #preprocessing the election data
+    num_alt = len(e.profile)
+
+    keys = [key for key in e.profile.keys()]
+    cost_proj = np.asarray([key.cost for key in keys])
+    votes_proj = np.array([len(e.profile[key]) for key in keys])
+
+    #preproccess groups somehow
+    #get per group total number of people-approvals of each project in a vector
+    groups = list(g)
+
+    gp = [0] * num_alt
+    gv = [gp] * len(groups)
+    for i in range(len(keys)):
+        for v in e.profile[keys[i]]:
+            for j in range(len(groups)):
+                if v in groups[j]:
+                    gv[j][i] += 1
+
+    gz = []
+    for group in groups:
+        gz.append(len(group))
+    
+    
+
+    #defining variables, objective and constraints
+    x = cp.Variable(num_alt, integer = True)
+    m = cp.Variable()
+    
+    if u:
+        #maximize cost utility
+        o = cp.Maximize(np.multiply(votes_proj, cost_proj) @ x)
+    else:
+        #maximize vote utility
+        o = cp.Maximize(votes_proj @ x)
+    
+    c = [0 <= x, x <= 1, cost_proj @ x <= e.budget]
+
+    #append group constraints to c
+
+    for i in range(len(gv)):
+        gp = gv[i]
+        gs = gz[i]
+        if u:
+            c.append(np.multiply(gp, cost_proj) @ x / gs <= m)
+            c.append(np.multiply(gp, cost_proj) @ x / gs >= eps * m)
+        else:
+            c.append(gp @ x / gs <= m)
+            c.append(gp @ x / gs >= eps * m)
+        
+
+    prob = cp.Problem(o, c)
+
+    #running the problem
+    result = prob.solve()
+    vals = x.value
+
+    #parsing the results'
+    res = set()
+    for i in range(len(vals)):
+        if vals[i] == 1:
+            res.add(keys[i])
+
+    return res
 
 def eval_outcome (o : set[Candidate], e : Election, g):
     results = {}
@@ -428,21 +494,33 @@ def eval_outcome (o : set[Candidate], e : Election, g):
  
     return results
 
-def generate_groups (e : Election, m : int):
-    pass
+def generate_groups (e : Election, m : str):
+    groups = set() 
+    vs = list(e.voters)                                               
+    if m == "fl":
+        maxi = len(vs) - 1
+        groups.add(tuple(vs[0:(maxi // 2)]))
+        groups.add(tuple(vs[(maxi // 2 + 1):maxi]))
+        
+
     ##need to define methods and implement
 
     ##groups should be a set of tuples of voters
+    return groups
 
 def run_gauntlet(filename):
     e = Election().read_from_files(filename)
-
+    
+    groups = generate_groups(e, "fl")
+    methods = {}
     print(optimal(e, True))
     print(optimal(e, False))
+    print(bounded_utility(e, groups))
     print(greedy(e))
     print(greedy(e, True))
     print(equal_shares(e))
     print(onemin(e))
+    print(onemin(e, groups))
 
 run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
 
