@@ -295,26 +295,104 @@ def equal_shares(e : Election, completion : str = None) -> set[Candidate]:
     
 ## The following is coded by us
 
-def greedy(e : Election) -> set[Candidate]:
-    pass
+def greedy(e : Election, u : bool = False) -> set[Candidate]:
+    spent = 0
+    selected_projects = []
+    selected_row_info = []
+    profiles = e.profile
+    cands = profiles.keys()
+    profs = [(c, c.cost, len(profiles[c])) for c in cands]
+    if u: 
+        profs = [((x[0]), x[1], x[1] * x[2]) for x in profs]
+    sorted = profs
+    sorted.sort(key = lambda votes: votes[2])
+    while len(sorted) > 0:
+        active = sorted.pop()
+        if spent + active[1] < e.budget:
+            selected_projects.append(active[0])
+            selected_row_info.append(active)
+            spent += active[1]
 
-def onemin(e : Election, g : list, u : bool) -> set[Candidate]:
-    pass
+    return(set(selected_projects))
+
+def onemin(e : Election, g : list = None, m = None, u : bool = False, ) -> set[Candidate]:
+    unselected_proj = set(e.profile.keys())
+    selected_proj = set()
+    if g == None:
+        g = {(x,) for x in e.voters}
+    unsat_g = g.copy()
+    spent = 0
+    
+    
+    while len(unsat_g) > 0:
+        null_can = Candidate(None, 0)
+        best_proj = (null_can, 0)
+        for proj in unselected_proj:
+            if proj.cost <= e.budget - spent:
+                groups_satisfying = 0
+                satisfied_voters = set(e.profile[proj].keys())
+                for gr in list(unsat_g):
+                    if not satisfied_voters.isdisjoint(set(gr)): groups_satisfying += 1
+                    
+                if groups_satisfying / proj.cost > best_proj[1]:
+                    best_proj = (proj, groups_satisfying / proj.cost)
+        if best_proj[0] == null_can:
+            break
+        selected_proj.add(best_proj[0])
+        unselected_proj.remove(best_proj[0])
+        spent += best_proj[0].cost
+        
+        to_remove = set()
+        for g in unsat_g:
+            pres = False
+            for v in e.profile[best_proj[0]]:
+                if v in g:
+                    pres = True
+            if pres:
+                to_remove.add(g)
+
+        unsat_g -= to_remove
+    
+    ##todo: capstone after onemin
+
+    return selected_proj
+            
+
 
 def optimal(e : Election, u: bool) -> set[Candidate]:
     pass
+    ##todo
 
 def bounded_utility(e: Election, g : list, u : bool, eps : int) -> set[Candidate]:
     pass
+    ##todo after optimal
 
-def eval_outcome (o : set[Candidate], e : Election):
-    pass
+def eval_outcome (o : set[Candidate], e : Election, g):
+    results = {}
+    ##need to port code
 
-def generate_groups (e : Election):
+    #money spent 
+
+    #number of uncovered individuals
+
+    #number of uncovered groups
+
+    #utility by group by measure
+
+    #total utility by measure
+
+ 
+    return results
+
+def generate_groups (e : Election, m : int):
     pass
+    ##need to define methods and implement
+
+    ##groups should be a set of tuples of voters
 
 def run_gauntlet(filename):
     e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
 
 e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
-print(e)
+print(greedy(e))
+print(onemin(e))

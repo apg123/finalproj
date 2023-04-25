@@ -362,13 +362,13 @@ def set_cover_greedy(budget, proposals, votes):
 metadata = {}
 with codecs.open('poland_warszawa_2022_ursynow.pb.txt', encoding='utf-8') as f:
     for line in f:
-        if line == 'META\n':
+        if line == 'META\r\n':
             pass
-        elif line == 'PROJECTS\n':
+        elif line == 'PROJECTS\r\n':
             break
         else:
             split = line.split(";")
-            metadata[split[0]] = split[1][0:(len(split[1]) - 1)]
+            metadata[split[0]] = split[1][0:(len(split[1]) - 2)]
 
 
 print(metadata["budget"])
@@ -377,7 +377,7 @@ print(metadata["budget"])
 projects = []
 with codecs.open('projects.txt', encoding='utf-8') as f:
     for line in f:
-        if line == "PROJECTS\n" or line == "project_id;cost;category;votes;name;target;selected;latitude;longitude\n":
+        if line == "PROJECTS\r\n" or line == "project_id;cost;category;votes;name;target;selected;latitude;longitude\r\n":
             pass
         else:
             split = line.split(";")
@@ -389,7 +389,7 @@ with codecs.open('projects.txt', encoding='utf-8') as f:
 projects = []
 with codecs.open('projects.txt', encoding='utf-8') as f:
     for line in f:
-        if line == "PROJECTS\n" or line == "project_id;cost;category;votes;name;target;selected;latitude;longitude\n":
+        if line == "PROJECTS\r\n" or line == "project_id;cost;category;votes;name;target;selected;latitude;longitude\r\n":
             pass
         else:
             split = line.split(";")
@@ -400,7 +400,7 @@ with codecs.open('projects.txt', encoding='utf-8') as f:
 votes = []
 with codecs.open('voters.txt', encoding='utf-8') as f:
     for line in f:
-        if line == "VOTES\n" or line == "voter_id;age;sex;voting_method;vote\n":
+        if line == "VOTES\r\n" or line == "voter_id;age;sex;voting_method;vote\r\n":
             pass
         else:
             split = line.split(";")
