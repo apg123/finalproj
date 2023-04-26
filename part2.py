@@ -1,10 +1,13 @@
 import codecs
+from collections import defaultdict
 import math
 import numpy as np
 #import matplotlib.pyplot as plt
 from pathlib import Path
 import csv
 import cvxpy as cp
+import sklearn as sk
+from sklearn.cluster import AgglomerativeClustering
 
 
 
@@ -14,12 +17,14 @@ class Voter:
             id : str,
             sex : str = None,
             age : int = None,
-            subunits : set[str] = set()
+            subunits : set[str] = set(),
+            utilities : list = list()
             ):
         self.id = id #unique id
         self.sex = sex
         self.age = age
         self.subunits = subunits
+        self.utilities = list()
 
     def __hash__(self):
         return hash(self.id)
@@ -496,15 +501,46 @@ def eval_outcome (o : set[Candidate], e : Election, g):
 
 def generate_groups (e : Election, m : str):
     groups = set() 
-    vs = list(e.voters)                                               
+    vs = list(e.voters)                              
     if m == "fl":
         maxi = len(vs) - 1
         groups.add(tuple(vs[0:(maxi // 2)]))
         groups.add(tuple(vs[(maxi // 2 + 1):maxi]))
-        
+     
 
     ##need to define methods and implement
-
+    elif m == "agglom":
+        clustering = AgglomerativeClustering(5)
+        for c in e.profile:
+            for v in vs:
+                if v in e.profile[c]:
+                    v.utilities.append(1)
+                else:
+                    v.utilities.append(0)
+        voterListSorted = sorted(list(e.voters), key=lambda x: x.id)
+        data = [voter.utilities for voter in voterListSorted]
+        groupDict = defaultdict(set)
+        labels = clustering.fit_predict(data)
+        for index, label in enumerate(labels):
+            groupDict[label].add(voterListSorted[index])
+        for val in groupDict.values():
+            groups.add(tuple(val))
+        
+    
+    elif m == "age":
+        ageList = [voter for voter in vs if voter.age]
+        groups.add(tuple(voter for voter in ageList if int(voter.age) < 25))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 25 and int(voter.age) <35))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 35 and int(voter.age) <45))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 45 and int(voter.age) <55))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 55 and int(voter.age) <65))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 65 and int(voter.age) <75))
+        groups.add(tuple(voter for voter in ageList if int(voter.age) >= 75))
+    elif m == "gend":
+        groups.add(tuple(voter for voter in vs if voter.sex == "M"))
+        groups.add(tuple(voter for voter in vs if voter.sex == "K"))
+    else:
+        raise Exception("Input Valid Partition Method")
     ##groups should be a set of tuples of voters
     return groups
 
@@ -522,5 +558,20 @@ def run_gauntlet(filename):
     print(onemin(e))
     print(onemin(e, groups))
 
-run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
+def run_test_groups(filename):
+    e = Election().read_from_files(filename)
+    # gend = generate_groups(e, "gend")
+    # for group in gend:
+    #     for ind in group:
+    #         print(ind.sex)
+    # age = generate_groups(e, "age")
+    # for group in age:
+    #     print(group[0].age)
+    agglom = generate_groups(e, "agglom")
+    for group in agglom:
+        print(group)
+    return 
+
+# run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
+run_test_groups("poland_warszawa_2022_ursynow.pb.txt")
 
