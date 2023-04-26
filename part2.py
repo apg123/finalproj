@@ -317,12 +317,13 @@ def greedy(e : Election, u : bool = False) -> set[Candidate]:
 
     return(set(selected_projects))
 
-def onemin(e : Election, g : set = None, m = None, u : bool = False, ) -> set[Candidate]:
+def onemin(e : Election, g : list = None, m = None, u : bool = False, ) -> set[Candidate]:
     unselected_proj = set(e.profile.keys())
     selected_proj = set()
     if g == None:
-        g = {(x,) for x in e.voters}
-    unsat_g = g.copy()
+        unsat_g = {(x,) for x in e.voters}
+    else:
+        unsat_g = set(g)
     spent = 0
     
     
@@ -345,13 +346,13 @@ def onemin(e : Election, g : set = None, m = None, u : bool = False, ) -> set[Ca
         spent += best_proj[0].cost
         
         to_remove = set()
-        for g in unsat_g:
+        for gr in unsat_g:
             pres = False
             for v in e.profile[best_proj[0]].keys():
-                if v in g:
+                if v in gr:
                     pres = True
             if pres:
-                to_remove.add(g)
+                to_remove.add(gr)
 
         unsat_g -= to_remove
 
@@ -409,8 +410,7 @@ def optimal(e : Election, u: bool) -> set[Candidate]:
 
     return res
 
-def bounded_utility(e: Election, g : set, u : bool = False, eps : int = .5) -> set[Candidate]:
-    
+def bounded_utility(e: Election, groups : list, u : bool = False, eps : int = .5) -> set[Candidate]:
     #preprocessing the election data
     num_alt = len(e.profile)
 
@@ -420,21 +420,21 @@ def bounded_utility(e: Election, g : set, u : bool = False, eps : int = .5) -> s
 
     #preproccess groups somehow
     #get per group total number of people-approvals of each project in a vector
-    groups = list(g)
 
     gp = [0] * num_alt
     gv = [gp] * len(groups)
     for i in range(len(keys)):
-        for v in e.profile[keys[i]].keys():
-            for j in range(len(groups)):
+        voters = e.profile[keys[i]].keys()
+        for j in range(len(groups)):
+            count = 0
+            for v in voters:
                 if v in groups[j]:
-                    gv[j][i] += 1
+                    count += 1
+            gv[j][i] += count
 
     gz = []
     for group in groups:
         gz.append(len(group))
-    
-    
 
     #defining variables, objective and constraints
     x = cp.Variable(num_alt, integer = True)
@@ -476,7 +476,7 @@ def bounded_utility(e: Election, g : set, u : bool = False, eps : int = .5) -> s
 
     return res
 
-def eval_outcome (o : set[Candidate], e : Election, g : set):
+def eval_outcome (o : set[Candidate], e : Election, g : list):
     results = {}
     ##need to port code
 
@@ -485,28 +485,16 @@ def eval_outcome (o : set[Candidate], e : Election, g : set):
 
     #number of uncovered individuals
     #number of uncovered groups
-    groups = list(g)
+    groups = g
     nvotes = len(e.voters)
     ngroups = len(groups)
     
-    covered_individuals = set()
-
-    for proj in o:
-       covered_individuals = covered_individuals.union(set(e.profile[proj].keys()))
-
-    uncovered_voters = set(e.voters).difference(covered_individuals)
-    results["uncovered_voters"] = uncovered_voters
-    results["num_uncovered_voters"] = len(uncovered_voters)
-
-    uncovered_groups = set()
-    for group in groups:
-        if not any(v in covered_individuals for v in g):
-            uncovered_groups.add(group)
-    results["uncovered_groups"] = uncovered_groups
-    results["num_uncovered_groups"] = len(uncovered_groups)
+    covered_individuals = set()       
 
     #utility by group by measure
-    #todo
+    
+    group_util_cost = [0] * ngroups
+    group_util_vote = [0] * ngroups
 
     #total utility by measure
 
@@ -514,51 +502,79 @@ def eval_outcome (o : set[Candidate], e : Election, g : set):
     total_vote_u = 0
 
     for proj in o:
+        covered_individuals = covered_individuals.union(set(e.profile[proj].keys()))
         for v in e.profile[proj].keys():
             total_cost_u += proj.cost
             total_vote_u += 1
+            for i in range(ngroups):
+                if v in groups[i]:
+                    group_util_cost[i] += proj.cost
+                    group_util_vote[i] += 1
 
     results["cost_u"] = total_cost_u
     results["vote_u"] = total_vote_u
+    results["group_util_cost"] = group_util_cost
+    results["group_util_vote"] = group_util_vote
+    uncovered_voters = set(e.voters).difference(covered_individuals)
+    #results["uncovered_voters"] = uncovered_voters
+    results["num_uncovered_voters"] = len(uncovered_voters)
 
+    uncovered_groups = set()
+    for group in groups:
+        if not any(v in covered_individuals for v in g):
+            uncovered_groups.add(group)
+    #results["uncovered_groups"] = uncovered_groups
+    results["num_uncovered_groups"] = len(uncovered_groups)
  
     return results
 
 def generate_groups (e : Election, m : str):
-    groups = set() 
+    groups = []
+    group_names = []
     vs = list(e.voters)                                               
     if m == "fl":
         maxi = len(vs) - 1
-        groups.add(tuple(vs[0:(maxi // 2)]))
-        groups.add(tuple(vs[(maxi // 2 + 1):maxi]))
+        groups.append(tuple(vs[0:(maxi // 2)]))
+        groups.append(tuple(vs[(maxi // 2 + 1):maxi]))
         
 
     ##need to define methods and implement
 
-    ##groups should be a set of tuples of voters
-    return groups
+    ##groups should be a list of tuples of voters
+    return groups, group_names
 
 def run_gauntlet(filename):
     e = Election().read_from_files(filename)
     
-
-    
-    groups = generate_groups(e, "fl")
     methods = {}
-    #methods["opt_cost_u"] = optimal(e, True)
-    #methods["opt_vote_u"] = optimal(e, False)
-    #methods["bu_2_group_vote_u"] = bounded_utility(e, groups)
-    #methods["greedy_vote_u"] = greedy(e)
-    #methods["greedy_cost_u"] = greedy(e, True)
-    #methods["mes"] = equal_shares(e)
-    #methods["onemin_full"] = onemin(e)
-    methods["onemin_group"] = onemin(e, groups, "mes")
 
-    print(eval_outcome(methods["onemin_group"], e, groups))
+    demo_group, demo_names = generate_groups(e, "demo")
+    cluster_group, cluster_names = generate_groups(e, "cluster")
+
+    ###
+    methods["opt_cost_u"] = optimal(e, True)
+    methods["opt_vote_u"] = optimal(e, False)
+    methods["greedy_cost_u"] = greedy(e, True)
+    methods["greedy_vote_u"] = greedy(e, False)
+    methods["mes"] = equal_shares(e)
+
+    for group_type in ["full", "demo", "cluster"]:
+        if group_type == "full":
+            methods[f"onemin_{group_type}"] = onemin(e, None, "g", False)
+        elif group_type == "demo":
+            methods[f"onemin_{group_type}"] = onemin(e, demo_group, "g", False)
+            methods[f"bu_2_{group_type}_votes"] = bounded_utility(e, demo_group)
+            methods[f"bu_2_{group_type}_cost"] = bounded_utility(e, demo_group)
+        elif group_type == "cluster":
+            methods[f"onemin_{group_type}"] = onemin(e, cluster_group, "g", False)
+            methods[f"bu_2_{group_type}_votes"] = bounded_utility(e, cluster_group)
+            methods[f"bu_2_{group_type}_cost"] = bounded_utility(e, cluster_group)
 
     return methods
 
-m = run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
-
+#m = run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
+e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
+g, _ = generate_groups(e, "fl")
+m = onemin(e, g, None, False)
 print(m)
 
