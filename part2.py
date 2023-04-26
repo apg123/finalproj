@@ -241,7 +241,7 @@ def _is_exhaustive(e : Election, W : set[Candidate]) -> bool:
     return costW + minRemainingCost > e.budget
 
 #MES Pabulib
-def equal_shares(e : Election, completion : str = None) -> set[Candidate]:
+def equal_shares(e : Election, completion : str = 'binsearch') -> set[Candidate]:
     endow, W = _mes_internal(e)
     if completion is None:
         return W
@@ -415,7 +415,7 @@ def optimal(e : Election, u: bool) -> set[Candidate]:
 
     return res
 
-def bounded_utility(e: Election, groups : list, u : bool = False, eps : int = .5) -> set[Candidate]:
+def bounded_utility(e: Election, groups : list, u : bool = False, eps : float = 2/3) -> set[Candidate]:
     #preprocessing the election data
     num_alt = len(e.profile)
 
@@ -425,9 +425,8 @@ def bounded_utility(e: Election, groups : list, u : bool = False, eps : int = .5
 
     #preproccess groups somehow
     #get per group total number of people-approvals of each project in a vector
-
-    gp = [0] * num_alt
-    gv = [gp] * len(groups)
+   
+    gv =  [[0 for y in range(num_alt)] for x in range(len(groups))]
     for i in range(len(keys)):
         voters = e.profile[keys[i]].keys()
         for j in range(len(groups)):
@@ -516,6 +515,21 @@ def eval_outcome (o : set[Candidate], e : Election, g : list):
                     group_util_cost[i] += proj.cost
                     group_util_vote[i] += 1
 
+    uncovered_groups = set()
+    group_lens = []
+    for group in groups:
+        uncovered = True
+        for v in group:
+            if v in covered_individuals:
+                uncovered = False
+        if uncovered:
+            uncovered_groups.add(group)
+        group_lens.append(len(group))
+
+    for i in range(ngroups):
+        group_util_cost[i] = group_util_cost[i] / group_lens[i]
+        group_util_vote[i] = group_util_vote[i] / group_lens[i]
+
     results["cost_u"] = total_cost_u
     results["vote_u"] = total_vote_u
     results["group_util_cost"] = group_util_cost
@@ -524,10 +538,6 @@ def eval_outcome (o : set[Candidate], e : Election, g : list):
     #results["uncovered_voters"] = uncovered_voters
     results["num_uncovered_voters"] = len(uncovered_voters)
 
-    uncovered_groups = set()
-    for group in groups:
-        if not any(v in covered_individuals for v in g):
-            uncovered_groups.add(group)
     #results["uncovered_groups"] = uncovered_groups
     results["num_uncovered_groups"] = len(uncovered_groups)
  
@@ -541,8 +551,7 @@ def generate_groups (e : Election, m : str):
         maxi = len(vs) - 1
         groups.append(tuple(vs[0:(maxi // 2)]))
         groups.append(tuple(vs[(maxi // 2 + 1):maxi]))
-     
-
+        group_names = ["l", "r"]
     ##need to define methods and implement
     elif m == "agglom":
         clustering = AgglomerativeClustering(5)
@@ -560,6 +569,7 @@ def generate_groups (e : Election, m : str):
             groupDict[label].add(voterListSorted[index])
         for val in groupDict.values():
             groups.append(tuple(val))
+        group_names = ["c1", "c2", "c3", "c4", "c5"]
         
     
     elif m == "age":
@@ -571,15 +581,18 @@ def generate_groups (e : Election, m : str):
         groups.append(tuple(voter for voter in ageList if int(voter.age) >= 55 and int(voter.age) <65))
         groups.append(tuple(voter for voter in ageList if int(voter.age) >= 65 and int(voter.age) <75))
         groups.append(tuple(voter for voter in ageList if int(voter.age) >= 75))
+        group_names = ["<25", "25_to_34", "35_to_44", "45_to_54", "55+to_64", "65_to_74", "75+"]
     elif m == "gend":
         groups.append(tuple(voter for voter in vs if voter.sex == "M"))
         groups.append(tuple(voter for voter in vs if voter.sex == "K"))
+        group_names = ["M", "K"]
     else:
         raise Exception("Input Valid Partition Method")
     ##groups should be a set of tuples of voters
     return groups, group_names
 
 def run_gauntlet(filename):
+    print(f"Beginning Gauntlet: {filename}")
     e = Election().read_from_files(filename)
     
     methods = {}
@@ -591,29 +604,73 @@ def run_gauntlet(filename):
     ###
     methods["opt_cost_u"] = optimal(e, True)
     methods["opt_vote_u"] = optimal(e, False)
+    print(f"Processed Optimal: {filename}")
     methods["greedy_cost_u"] = greedy(e, True)
     methods["greedy_vote_u"] = greedy(e, False)
+    print(f"Processed Greedy: {filename}")
     methods["mes"] = equal_shares(e)
-
+    print(f"Processed MES: {filename}")
     for group_type in ["full", "agglom", "age", "gend"]:
         if group_type == "full":
             methods[f"onemin_{group_type}"] = onemin(e, None, "g", False)
         elif group_type == "agglom":
             methods[f"onemin_{group_type}"] = onemin(e, agglom_group, "g", False)
-            methods[f"bu_2_{group_type}_votes"] = bounded_utility(e, agglom_group)
-            methods[f"bu_2_{group_type}_cost"] = bounded_utility(e, agglom_group)
+            methods[f"bu_1.5_{group_type}_votes"] = bounded_utility(e, agglom_group)
+            methods[f"bu_1.5_{group_type}_cost"] = bounded_utility(e, agglom_group, True)
         elif group_type == "age":
             methods[f"onemin_{group_type}"] = onemin(e, age_group, "g", False)
-            methods[f"bu_2_{group_type}_votes"] = bounded_utility(e, age_group)
-            methods[f"bu_2_{group_type}_cost"] = bounded_utility(e, age_group)
+            methods[f"bu_1.5_{group_type}_votes"] = bounded_utility(e, age_group)
+            methods[f"bu_1.5_{group_type}_cost"] = bounded_utility(e, age_group, True)
+        elif group_type == "gend":
+            methods[f"onemin_{group_type}"] = onemin(e, gend_group, "g", False)
+            methods[f"bu_1.2_{group_type}_votes"] = bounded_utility(e, gend_group, False, .8)
+            methods[f"bu_1.2_{group_type}_cost"] = bounded_utility(e, gend_group, True, .8)
+        print(f"Processed {group_type}: {filename}")
 
-    return methods
+    algorithms = methods.keys()
 
+    print(f"Evaluating outcomes: {filename}")
+    results = {}
+    for alg in algorithms:
+        print(f"Evaluating: {alg}")
+        r1 = eval_outcome(methods[alg], e, age_group)
+        r2 = eval_outcome(methods[alg], e, gend_group)
+        results[alg] = [len(e.voters), r1["spent"], r1["cost_u"], r1["vote_u"], r1["num_uncovered_voters"], r1["num_uncovered_groups"], r2["num_uncovered_groups"],
+                        r1["group_util_cost"], r1["group_util_vote"], r2["group_util_cost"], r2["group_util_vote"]]
+    print(f"Done with {filename}")
+    print(f"________________________________________________")
+    print(results)
+    print(f"________________________________________________")
+    return results
+
+def run_mes(filename):
+    print(f"Beginning MES: {filename}")
+    e = Election().read_from_files(filename)
+    
+    methods = {}
+
+    agglom_group, agglom_names = generate_groups(e, "agglom")
+    age_group, age_names = generate_groups(e, "age")
+    gend_group, gend_names = generate_groups(e, "gend")
+
+    methods["mes"] = equal_shares(e)
+
+    algorithms = methods.keys()
+
+    print(f"Evaluating outcomes: {filename}")
+    results = {}
+    for alg in algorithms:
+        print(f"Evaluating: {alg}")
+        r1 = eval_outcome(methods[alg], e, age_group)
+        r2 = eval_outcome(methods[alg], e, gend_group)
+        results[alg] = [len(e.voters), r1["spent"], r1["cost_u"], r1["vote_u"], r1["num_uncovered_voters"], r1["num_uncovered_groups"], r2["num_uncovered_groups"],
+                        r1["group_util_cost"], r1["group_util_vote"], r2["group_util_cost"], r2["group_util_vote"]]
+    print(f"Done with {filename}")
+    print(f"________________________________________________")
+    print(results)
+    print(f"________________________________________________")
+    return results
 #m = run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
-e = Election().read_from_files("poland_warszawa_2022_ursynow.pb.txt")
-g, _ = generate_groups(e, "fl")
-m = onemin(e, g, None, False)
-print(m)
 def run_test_groups(filename):
     e = Election().read_from_files(filename)
     # gend = generate_groups(e, "gend")
@@ -628,6 +685,50 @@ def run_test_groups(filename):
         print(group)
     return 
 
-# run_gauntlet("poland_warszawa_2022_ursynow.pb.txt")
-run_test_groups("poland_warszawa_2022_ursynow.pb.txt")
+files = ["poland_warszawa_2022_wawer.pb.txt", "poland_warszawa_2022_ursynow.pb.txt", 
+         "poland_warszawa_2020_praga-poludnie.pb.txt"]
+
+#files = ["poland_warszawa_2022_wawer.pb.txt"]
+
+result_list = []
+for f in files:
+    res = run_gauntlet(f)
+    #res = run_mes(f)
+    result_list.append(res)
+
+print(result_list)
+
+print("________________________________________")
+print("Results by Algorithm")
+
+algwise_utilities = {}
+algwise_worst_group_ratio = {}
+algwise_uncovered_people = {}
+
+for alg in result_list[0].keys():
+    utilities = []
+    uncovered_people = []
+    worst_group_ratio = []
+
+    for res in result_list:
+        utilities.append(res[alg][2:4])
+        uncovered_people.append([res[alg][4] / res[alg][0]])
+        worst_group_ratio.append([min(res[alg][7]) / (res[alg][2] / res[alg][0]),
+                                 min(res[alg][8]) / (res[alg][3] / res[alg][0]),
+                                 min(res[alg][9]) / (res[alg][2] / res[alg][0]),
+                                 min(res[alg][10]) / (res[alg][3] / res[alg][0])])
+    algwise_utilities[alg] = utilities
+    algwise_worst_group_ratio[alg] = worst_group_ratio
+    algwise_uncovered_people[alg] = uncovered_people
+
+print("Algorithm Utilities")
+print(algwise_utilities)
+print("________________________________________")
+print("Algorithm Worst Group Ratio of Utilities")
+print(algwise_worst_group_ratio)
+print("________________________________________")
+print("Algorithm Percent of People Uncovered")
+print(algwise_uncovered_people)
+print("________________________________________")
+print("DONE")
 
