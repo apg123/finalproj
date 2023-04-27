@@ -602,9 +602,6 @@ def run_gauntlet(filename):
     gend_group, gend_names = generate_groups(e, "gend")
 
     ###
-    methods["opt_cost_u"] = optimal(e, True)
-    methods["opt_vote_u"] = optimal(e, False)
-    print(f"Processed Optimal: {filename}")
     methods["greedy_cost_u"] = greedy(e, True)
     methods["greedy_vote_u"] = greedy(e, False)
     print(f"Processed Greedy: {filename}")
@@ -680,16 +677,50 @@ def run_test_groups(filename):
     # age = generate_groups(e, "age")
     # for group in age:
     #     print(group[0].age)
-    agglom = generate_groups(e, "agglom")
-    for group in agglom:
-        print(group)
-    return 
+    agglom_group, agglom_names = generate_groups(e, "agglom")
+    age_group, age_names = generate_groups(e, "age")
+    gend_group, gend_names = generate_groups(e, "gend")
 
-files = ["poland_warszawa_2022_wawer.pb.txt", "poland_warszawa_2022_ursynow.pb.txt", 
-         "poland_warszawa_2020_praga-poludnie.pb.txt"]
+    methods = {}
 
-#files = ["poland_warszawa_2022_wawer.pb.txt"]
+    methods[f"bu_1.5_agglom_votes"] = bounded_utility(e, agglom_group)
+    methods[f"bu_1.5_agglom_cost"] = bounded_utility(e, agglom_group, True)
 
+    algorithms = methods.keys()
+
+    print(f"Evaluating outcomes: {filename}")
+    results = {}
+    for alg in algorithms:
+        print(f"Evaluating: {alg}")
+        r1 = eval_outcome(methods[alg], e, age_group)
+        r2 = eval_outcome(methods[alg], e, gend_group)
+        results[alg] = [len(e.voters), r1["spent"], r1["cost_u"], r1["vote_u"], r1["num_uncovered_voters"], r1["num_uncovered_groups"], r2["num_uncovered_groups"],
+                        r1["group_util_cost"], r1["group_util_vote"], r2["group_util_cost"], r2["group_util_vote"]]
+        
+    return results
+
+
+    #for group in agglom:
+    #    print(group)
+    #return 
+
+files = ["poland_warszawa_2020_praga-poludnie.pb.txt","poland_warszawa_2022_wawer.pb.txt", 
+        "poland_warszawa_2022_ochota.pb.txt"]
+
+e = Election().read_from_files("poland_warszawa_2020_praga-poludnie.pb.txt")
+
+print(optimal(e, True))
+print(greedy(e, True))
+print(greedy(e, False))
+print(sum([c.cost for c in optimal(e, True)]))
+print(sum([c.cost for c in optimal(e, False)]))
+print(sum([c.cost for c in greedy(e, False)]))
+print(sum([c.cost for c in greedy(e, True)]))
+
+print(sum([len(e.profile[key]) * key.cost for key in optimal(e, True)]))
+print(sum([len(e.profile[key]) * key.cost for key in greedy(e, True)]))
+
+#files = ["poland_warszawa_2022_ochota.pb.txt"]
 result_list = []
 for f in files:
     res = run_gauntlet(f)
